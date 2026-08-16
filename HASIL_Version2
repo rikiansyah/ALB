@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Hasil Kerja Alat Berat — v2</title>
+<meta name="description" content="Hitung kebutuhan HM & konsumsi solar alat berat. Menyimpan data peralatan dan riwayat secara lokal (IndexedDB)."/>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap">
+
+<style>
+  :root{
+    --bg:#eef2f7;
+    --card:#fff;
+    --accent:#2b7cff;
+    --success:#25D366;
+    --muted:#62707a;
+    --radius:12px;
+    --maxw:900px;
+  }
+  *{box-sizing:border-box}
+  body{
+    font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background:var(--bg);
+    margin:0;
+    padding:20px;
+    color:#102027;
+  }
+  .wrap{max-width:var(--maxw); margin:0 auto;}
+  header{display:flex; align-items:center; gap:14px; margin-bottom:18px;}
+  .logo{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#5fb2ff);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:20px}
+  h1{font-size:20px;margin:0}
+  p.lead{margin:6px 0 0;color:var(--muted);font-size:13px}
+
+  .grid{display:grid;grid-template-columns:1fr 360px;gap:18px;align-items:start}
+  @media(max-width:960px){ .grid{grid-template-columns:1fr} }
+
+  .card{background:var(--card); border-radius:var(--radius); padding:16px; box-shadow:0 6px 20px rgba(16,32,39,.06);}
+
+  label{display:block;font-size:13px;color:#133044;margin-top:10px}
+  select,input[type="number"],input[type="text"]{
+    width:100%; padding:10px;border-radius:8px;border:1px solid #d7e2ee;font-size:14px;margin-top:6px;background:#fbfdff;
+  }
+
+  button{display:inline-block;padding:10px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:600}
+  .btn-primary{background:var(--accent); color:white}
+  .btn-ghost{background:transparent;border:1px solid #d7e2ee;color:#153047}
+  .btn-success{background:var(--success); color:#08260c}
+  .muted{color:var(--muted);font-size:13px}
+
+  #result{margin-top:14px;background:#f6f9ff;padding:12px;border-left:4px solid var(--accent);border-radius:8px;white-space:pre-wrap;font-size:14px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+
+  /* sidebar */
+  aside h3{margin:0 0 8px 0}
+  .small{font-size:13px;color:var(--muted)}
+  .history-list{max-height:360px;overflow:auto;margin-top:10px}
+  .history-item{padding:10px;border-radius:8px;border:1px solid #eef4ff;background:#fff;margin-bottom:8px;display:flex;gap:8px;align-items:center;justify-content:space-between}
+  .history-meta{font-size:13px;color:#123; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .history-actions{display:flex;gap:6px}
+
+  /* manage equipment */
+  .equip-list{max-height:220px;overflow:auto;margin-top:8px}
+  .equip-row{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;border:1px solid #f2f6fb;background:#fff;margin-bottom:8px}
+  .equip-row .meta{flex:1}
+  .form-inline{display:flex;gap:8px;align-items:center}
+  .note{font-size:12px;color:var(--muted);margin-top:8px}
+
+  /* small helpers */
+  .mr-auto{margin-right:auto}
+  .small-btn{padding:6px 8px;border-radius:6px;font-size:13px}
+  .danger{background:#ff6b6b;color:#fff}
+  .kbd{background:#eef4ff;border:1px solid #d7e9ff;padding:4px 6px;border-radius:6px;font-size:12px;color:#154}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo" aria-hidden="true">ALB</div>
+      <div>
+        <h1>Hasil Kerja Alat Berat</h1>
+        <p class="lead">Hitung kebutuhan HM & konsumsi solar — data tersimpan secara lokal. <span class="kbd">IndexedDB</span></p>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- main -->
+      <main>
+        <div class="card" aria-labelledby="main-title">
+          <h2 id="main-title" style="font-size:16px;margin:0 0 8px 0">Hitung Hasil Kerja</h2>
+
+          <form id="workForm" onsubmit="return false;" aria-describedby="form-desc">
+            <div id="form-desc" class="muted">Isi data lalu klik "Hitung". Gunakan <strong>Manage Data</strong> di samping untuk menambah/ubah peralatan</div>
+
+            <label for="alat">Pilih Alat Berat</label>
+            <select id="alat" required aria-required="true">
+              <option value="" disabled selected>-- Pilih Alat Berat --</option>
+            </select>
+
+            <label for="pekerjaan">Jenis Pekerjaan</label>
+            <select id="pekerjaan" required>
+              <option value="" disabled selected>-- Pilih Pekerjaan --</option>
+              <option value="jalan">Buat Jalan (meter)</option>
+              <option value="parit">Buat Parit (meter)</option>
+              <option value="jembatan">Jembatan/Gorong-gorong (unit)</option>
+              <option value="gusur">Land Clearing (ha)</option>
+              <option value="angkut">Angkut Material (rit)</option>
+              <option value="ratakan">Perataan Tanah (m²)</option>
+              <option value="galib">Galib Jalan (meter)</option>
+            </select>
+
+            <label for="volume">Volume Pekerjaan</label>
+            <input id="volume" type="number" min="0.01" step="0.01" placeholder="Contoh: meter / unit / ha / rit" required />
+
+            <label for="efisiensi">Efisiensi Lapangan</label>
+            <select id="efisiensi" aria-label="Efisiensi Lapangan">
+              <option value="1">Normal (100%)</option>
+              <option value="0.85">Berat (85%)</option>
+              <option value="0.7">Sangat Berat (70%)</option>
+            </select>
+
+            <label for="solar">Konsumsi Solar per HM (liter)</label>
+            <input id="solar" type="number" min="0" step="0.1" required />
+
+            <div class="controls">
+              <button class="btn-primary" type="button" id="calcBtn">Hitung Hasil</button>
+              <button class="btn-ghost" type="button" id="saveEqBtn" title="Buka pengaturan peralatan">Manage Data</button>
+              <button class="btn-success" type="button" id="whatsappBtn" title="Bagikan via WhatsApp">Bagikan WA</button>
+              <button class="btn-ghost" type="button" id="copyBtn" title="Salin ke clipboard">Salin</button>
+            </div>
+
+            <div id="result" role="status" aria-live="polite" hidden></div>
+          </form>
+
+          <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn-ghost small-btn" id="exportJsonBtn">Ekspor JSON</button>
+            <button class="btn-ghost small-btn" id="importJsonBtn">Impor JSON</button>
+            <button class="btn-ghost small-btn" id="exportCsvBtn">Ekspor CSV (history)</button>
+            <button class="btn-ghost small-btn" id="clearHistoryBtn">Kosongkan Riwayat</button>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="card" style="margin-top:16px;">
+          <h3 style="margin:0 0 8px 0">Riwayat Perhitungan</h3>
+          <div class="small muted">Klik "Jalankan" untuk memuat ulang input dari entri, atau "Hapus" untuk menghapus entri.</div>
+          <div class="history-list" id="historyList" aria-live="polite" tabindex="0"></div>
+        </div>
+      </main>
+
+      <!-- sidebar -->
+      <aside>
+        <div class="card">
+          <h3 style="margin:0 0 8px 0">Manage Data (Peralatan)</h3>
+          <div class="small muted">Tambah atau ubah peralatan — perubahan tersimpan lokal.</div>
+
+          <div style="margin-top:10px;">
+            <div class="equip-list" id="equipList"></div>
+
+            <form id="equipForm" style="margin-top:8px;" onsubmit="return false;">
+              <label for="eqId">Kode (unik)</label>
+              <input id="eqId" type="text" placeholder="exca" required />
+              <label for="eqName">Nama Peralatan</label>
+              <input id="eqName" type="text" placeholder="Excavator" required />
+              <label for="eqSolar">Solar per HM (liter)</label>
+              <input id="eqSolar" type="number" min="0" step="0.1" placeholder="18" required />
+              <div style="margin-top:8px; font-size:13px; color:var(--muted)">Output standar per 1 HM (kosongkan=0)</div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+                <input id="out_jalan" placeholder="jalan (m)" type="number" step="0.01" />
+                <input id="out_parit" placeholder="parit (m)" type="number" step="0.01" />
+                <input id="out_jembatan" placeholder="jembatan (unit)" type="number" step="0.01" />
+                <input id="out_gusur" placeholder="gusur (ha)" type="number" step="0.01" />
+                <input id="out_angkut" placeholder="angkut (rit)" type="number" step="0.01" />
+                <input id="out_ratakan" placeholder="ratakan (m2)" type="number" step="0.01" />
+                <input id="out_galib" placeholder="galib (m)" type="number" step="0.01" />
+              </div>
+
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <button class="btn-primary" id="addEquipBtn" type="button">Tambah / Simpan</button>
+                <button class="btn-ghost" id="resetEquipBtn" type="button">Reset</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="note">Ekspor/Impor JSON termasuk peralatan & riwayat. Data tersimpan di browser — tidak diunggah ke server.</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+<script>
+/*
+  HASIL ALBER v2
+  - IndexedDB untuk menyimpan equipments dan history
+  - CRUD peralatan
+  - Simpan riwayat setiap perhitungan
+  - Ekspor/Impor JSON, ekspor CSV, berbagi WA & salin clipboard
+  - Modifikasi: gunakan data DB bila tersedia, fallback ke defaults
+*/
+
+/* ===========================
+   Default data (fallback)
+   =========================== */
+const DEFAULT_EQUIPMENTS = [
+  { id:'exca', name:'Excavator', solar:18, outputs:{jalan:400,parit:300,jembatan:3,gusur:0.5,angkut:0,ratakan:200,galib:250} },
+  { id:'buld', name:'Bulldozer', solar:22, outputs:{jalan:350,parit:250,jembatan:2,gusur:1.2,angkut:0,ratakan:300,galib:300} },
+  { id:'loader', name:'Wheel Loader', solar:15, outputs:{jalan:200,parit:0,jembatan:0,gusur:0,angkut:25,ratakan:150,galib:0} },
+  { id:'crane', name:'Crane', solar:10, outputs:{jalan:0,parit:0,jembatan:4,gusur:0,angkut:0,ratakan:0,galib:0} },
+  { id:'grader', name:'Motor Grader', solar:17, outputs:{jalan:500,parit:0,jembatan:0,gusur:0,angkut:0,ratakan:400,galib:500} },
+  { id:'dumptruck', name:'Dump Truck', solar:12, outputs:{jalan:0,parit:0,jembatan:0,gusur:0,angkut:15,ratakan:0,galib:0} },
+  { id:'backhoe', name:'Backhoe Loader', solar:10, outputs:{jalan:300,parit:280,jembatan:1,gusur:0.3,angkut:0,ratakan:200,galib:200} },
+  { id:'roller', name:'Roller', solar:8, outputs:{jalan:600,parit:0,jembatan:0,gusur:0,angkut:0,ratakan:600,galib:0} },
+  { id:'scraper', name:'Scraper', solar:20, outputs:{jalan:450,parit:0,jembatan:0,gusur:0.8,angkut:0,ratakan:300,galib:300} },
+  { id:'tractor', name:'Traktor', solar:9, outputs:{jalan:150,parit:200,jembatan:0,gusur:0.4,angkut:0,ratakan:100,galib:150} }
+];
+
+/* ===========================
+   Lightweight IndexedDB wrapper
+   =========================== */
+function openDB(name='alberDB', version=1){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(name, version);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains('equipments')){
+        const s = db.createObjectStore('equipments', { keyPath: 'id' });
+        s.createIndex('by-name', 'name', { unique:false });
+      }
+      if(!db.objectStoreNames.contains('history')){
+        db.createObjectStore('history', { keyPath:'id', autoIncrement:true });
+      }
+    };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+
+async function idbGetAll(store){
+  const db = await openDB();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(store, 'readonly');
+    const s = tx.objectStore(store);
+    const all = s.getAll();
+    all.onsuccess = ()=>resolve(all.result);
+    all.onerror = ()=>reject(all.error);
+  });
+}
+async function idbGet(store, key){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, 'readonly');
+    const s = tx.objectStore(store);
+    const r = s.get(key);
+    r.onsuccess = ()=>resolve(r.result);
+    r.onerror = ()=>reject(r.error);
+  });
+}
+async function idbPut(store, obj){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, 'readwrite');
+    const s = tx.objectStore(store);
+    const r = s.put(obj);
+    r.onsuccess = ()=>resolve(r.result);
+    r.onerror = ()=>reject(r.error);
+  });
+}
+async function idbAdd(store, obj){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, 'readwrite');
+    const s = tx.objectStore(store);
+    const r = s.add(obj);
+    r.onsuccess = ()=>resolve(r.result);
+    r.onerror = ()=>reject(r.error);
+  });
+}
+async function idbDel(store, key){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, 'readwrite');
+    const s = tx.objectStore(store);
+    const r = s.delete(key);
+    r.onsuccess = ()=>resolve(true);
+    r.onerror = ()=>reject(r.error);
+  });
+}
+async function idbClear(store){
+  const db = await openDB();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(store, 'readwrite');
+    const s = tx.objectStore(store);
+    const r = s.clear();
+    r.onsuccess = ()=>resolve(true);
+    r.onerror = ()=>reject(r.error);
+  });
+}
+
+/* ===========================
+   Initialize DB with defaults if empty
+   =========================== */
+async function ensureDefaults(){
+  const eqs = await idbGetAll('equipments');
+  if(!eqs || eqs.length === 0){
+    for(const e of DEFAULT_EQUIPMENTS){
+      await idbPut('equipments', e);
+    }
+  }
+  // don't touch history on init
+}
+
+/* ===========================
+   UI bindings & helpers
+   =========================== */
+const alatSelect = document.getElementById('alat');
+const pekerjaanSelect = document.getElementById('pekerjaan');
+const solarInput = document.getElementById('solar');
+const volumeInput = document.getElementById('volume');
+const efisiensiSelect = document.getElementById('efisiensi');
+const resultEl = document.getElementById('result');
+const calcBtn = document.getElementById('calcBtn');
+const whatsappBtn = document.getElementById('whatsappBtn');
+const copyBtn = document.getElementById('copyBtn');
+
+const equipListEl = document.getElementById('equipList');
+const equipForm = document.getElementById('equipForm');
+const eqIdInput = document.getElementById('eqId');
+const eqNameInput = document.getElementById('eqName');
+const eqSolarInput = document.getElementById('eqSolar');
+const out_jalan = document.getElementById('out_jalan');
+const out_parit = document.getElementById('out_parit');
+const out_jembatan = document.getElementById('out_jembatan');
+const out_gusur = document.getElementById('out_gusur');
+const out_angkut = document.getElementById('out_angkut');
+const out_ratakan = document.getElementById('out_ratakan');
+const out_galib = document.getElementById('out_galib');
+
+const addEquipBtn = document.getElementById('addEquipBtn');
+const resetEquipBtn = document.getElementById('resetEquipBtn');
+
+const historyListEl = document.getElementById('historyList');
+const exportJsonBtn = document.getElementById('exportJsonBtn');
+const importJsonBtn = document.getElementById('importJsonBtn');
+const exportCsvBtn = document.getElementById('exportCsvBtn');
+const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+const saveEqBtn = document.getElementById('saveEqBtn');
+
+/* small notification helper */
+function notify(msg, time=2200){
+  const tmp = document.createElement('div');
+  tmp.textContent = msg;
+  tmp.style.position='fixed';
+  tmp.style.right='18px';
+  tmp.style.bottom='18px';
+  tmp.style.background='#123';
+  tmp.style.color='#fff';
+  tmp.style.padding='10px 12px';
+  tmp.style.borderRadius='8px';
+  tmp.style.zIndex=9999;
+  tmp.style.fontSize='13px';
+  document.body.appendChild(tmp);
+  setTimeout(()=> tmp.style.opacity='0.05', time-300);
+  setTimeout(()=> tmp.remove(), time);
+}
+
+/* ===========================
+   Populate equipments into select & manage list
+   =========================== */
+async function refreshEquipUI(){
+  const eqs = await idbGetAll('equipments');
+  alatSelect.innerHTML = `<option value="" disabled selected>-- Pilih Alat Berat --</option>`;
+  equipListEl.innerHTML = '';
+  // sort by name
+  eqs.sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+  for(const e of eqs){
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = `${e.name} (${e.id})`;
+    alatSelect.appendChild(opt);
+
+    // equipment card row
+    const row = document.createElement('div');
+    row.className = 'equip-row';
+    row.innerHTML = `
+      <div class="meta">
+        <div style="font-weight:600">${escapeHtml(e.name)}</div>
+        <div class="small muted">${e.id} • ${e.solar ?? '—'} L/HM</div>
+      </div>
+      <div style="display:flex;gap:6px" class="actions">
+        <button class="small-btn btn-ghost" data-id="${e.id}" data-act="load">Pilih</button>
+        <button class="small-btn btn-ghost" data-id="${e.id}" data-act="edit">Edit</button>
+        <button class="small-btn danger" data-id="${e.id}" data-act="delete">Hapus</button>
+      </div>
+    `;
+    equipListEl.appendChild(row);
+  }
+}
+
+/* ===========================
+   Load equipment defaults into inputs when selected
+   =========================== */
+alatSelect.addEventListener('change', async function(){
+  const id = this.value;
+  if(!id) return;
+  const eq = await idbGet('equipments', id);
+  if(eq){
+    solarInput.value = eq.solar ?? '';
+  } else {
+    solarInput.value = '';
+  }
+});
+
+/* ===========================
+   Calculation logic
+   =========================== */
+function formatNumber(n, digits=2){
+  if(Number.isFinite(n)) return Number(n).toFixed(digits);
+  return String(n);
+}
+
+async function hitung(){
+  const alatId = alatSelect.value;
+  const pekerjaan = pekerjaanSelect.value;
+  let volume = Number(volumeInput.value);
+  const efisiensi = Number(efisiensiSelect.value);
+  const solarPerHM = Number(solarInput.value);
+
+  if(!alatId || !pekerjaan || !volume || volume <= 0 || isNaN(solarPerHM)){
+    resultEl.hidden = false;
+    resultEl.textContent = 'Lengkapi input dengan benar.';
+    return;
+  }
+
+  const eq = await idbGet('equipments', alatId);
+  if(!eq){
+    resultEl.hidden = false;
+    resultEl.textContent = 'Data peralatan tidak ditemukan.';
+    return;
+  }
+
+  const kapasitas = Number((eq.outputs && eq.outputs[pekerjaan]) ?? 0);
+  if(!kapasitas || kapasitas <= 0){
+    resultEl.hidden = false;
+    resultEl.textContent = `${eq.name} tidak cocok untuk pekerjaan ini atau output standar belum diisi.`;
+    return;
+  }
+
+  const kapasitasEfektif = kapasitas * efisiensi;
+  const hm = volume / kapasitasEfektif;
+  const totalSolar = hm * solarPerHM;
+
+  const txt =
+`Alat Berat : ${eq.name} (${eq.id})
+Pekerjaan  : ${pekerjaan}
+Volume     : ${volume}
+Kapasitas Efektif : ${formatNumber(kapasitasEfektif,2)} per HM
+Kebutuhan HM       : ${formatNumber(hm,2)} HM
+Solar per HM       : ${formatNumber(solarPerHM,2)} liter
+Total Solar        : ${formatNumber(totalSolar,2)} liter
+Tanggal            : ${new Date().toLocaleString()}`;
+
+  resultEl.hidden = false;
+  resultEl.textContent = txt;
+
+  // save to history
+  const entry = {
+    timestamp: Date.now(),
+    alatId, alatName: eq.name,
+    pekerjaan, volume, efisiensi, solarPerHM,
+    kapasitasEfektif, hm, totalSolar
+  };
+  await idbPut('history', entry);
+  await refreshHistoryUI();
+  notify('Perhitungan disimpan ke riwayat');
+  lastResultText = txt;
+}
+
+/* ===========================
+   History UI
+   =========================== */
+let lastResultText = '';
+
+async function refreshHistoryUI(){
+  const hist = await idbGetAll('history');
+  // sort desc by timestamp
+  hist.sort((a,b)=>b.timestamp - a.timestamp);
+  historyListEl.innerHTML = '';
+  if(!hist.length){
+    historyListEl.innerHTML = `<div class="small muted">Belum ada riwayat.</div>`;
+    return;
+  }
+  for(const h of hist){
+    const d = new Date(h.timestamp);
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerHTML = `
+      <div class="history-meta">
+        <div style="font-weight:600">${escapeHtml(h.alatName)} • ${escapeHtml(h.pekerjaan)}</div>
+        <div class="small muted">${d.toLocaleString()} • ${formatNumber(h.totalSolar,2)} L</div>
+      </div>
+      <div class="history-actions">
+        <button class="small-btn btn-ghost" data-id="${h.id}" data-act="run">Jalankan</button>
+        <button class="small-btn btn-ghost" data-id="${h.id}" data-act="view">Lihat</button>
+        <button class="small-btn danger" data-id="${h.id}" data-act="del">Hapus</button>
+      </div>
+    `;
+    historyListEl.appendChild(item);
+  }
+}
+
+/* history action handlers (event delegation) */
+historyListEl.addEventListener('click', async (ev)=>{
+  const btn = ev.target.closest('button');
+  if(!btn) return;
+  const id = Number(btn.getAttribute('data-id'));
+  const act = btn.getAttribute('data-act');
+  if(act === 'run'){
+    const entry = await idbGet('history', id);
+    if(entry){
+      // restore inputs
+      alatSelect.value = entry.alatId;
+      // trigger change to load solar
+      const evch = new Event('change'); alatSelect.dispatchEvent(evch);
+      pekerjaanSelect.value = entry.pekerjaan;
+      volumeInput.value = entry.volume;
+      efisiensiSelect.value = entry.efisiensi;
+      solarInput.value = entry.solarPerHM;
+      // run calculation (but don't duplicate history)
+      await hitung();
+    }
+  } else if(act === 'view'){
+    const entry = await idbGet('history', id);
+    if(entry){
+      const txt =
+`Alat : ${entry.alatName} (${entry.alatId})
+Pekerjaan : ${entry.pekerjaan}
+Volume : ${entry.volume}
+HM : ${formatNumber(entry.hm,2)}
+Total Solar : ${formatNumber(entry.totalSolar,2)} L
+Waktu : ${new Date(entry.timestamp).toLocaleString()}`;
+      alert(txt);
+    }
+  } else if(act === 'del'){
+    if(confirm('Hapus entri riwayat ini?')) {
+      await idbDel('history', id);
+      notify('Entri riwayat dihapus');
+      await refreshHistoryUI();
+    }
+  }
+});
+
+/* ===========================
+   Equipment management handlers
+   =========================== */
+equipListEl.addEventListener('click', async (ev)=>{
+  const btn = ev.target.closest('button');
+  if(!btn) return;
+  const id = btn.getAttribute('data-id');
+  const act = btn.getAttribute('data-act');
+  if(act === 'load'){
+    alatSelect.value = id;
+    alatSelect.dispatchEvent(new Event('change'));
+    notify('Peralatan dipilih pada formulir utama');
+  } else if(act === 'edit'){
+    const eq = await idbGet('equipments', id);
+    if(eq){
+      eqIdInput.value = eq.id;
+      eqNameInput.value = eq.name;
+      eqSolarInput.value = eq.solar ?? '';
+      out_jalan.value = eq.outputs?.jalan ?? '';
+      out_parit.value = eq.outputs?.parit ?? '';
+      out_jembatan.value = eq.outputs?.jembatan ?? '';
+      out_gusur.value = eq.outputs?.gusur ?? '';
+      out_angkut.value = eq.outputs?.angkut ?? '';
+      out_ratakan.value = eq.outputs?.ratakan ?? '';
+      out_galib.value = eq.outputs?.galib ?? '';
+      // focus name
+      eqNameInput.focus();
+    }
+  } else if(act === 'delete'){
+    if(confirm('Hapus peralatan ini dari database lokal?')) {
+      await idbDel('equipments', id);
+      notify('Peralatan dihapus');
+      await refreshEquipUI();
+      await refreshHistoryUI();
+    }
+  }
+});
+
+addEquipBtn.addEventListener('click', async ()=>{
+  const id = String(eqIdInput.value || '').trim();
+  const name = String(eqNameInput.value || '').trim();
+  const solar = Number(eqSolarInput.value || 0);
+  if(!id || !name) { alert('Isi kode dan nama peralatan'); return; }
+  const outputs = {
+    jalan: Number(out_jalan.value || 0),
+    parit: Number(out_parit.value || 0),
+    jembatan: Number(out_jembatan.value || 0),
+    gusur: Number(out_gusur.value || 0),
+    angkut: Number(out_angkut.value || 0),
+    ratakan: Number(out_ratakan.value || 0),
+    galib: Number(out_galib.value || 0)
+  };
+  const obj = { id, name, solar, outputs };
+  await idbPut('equipments', obj);
+  await refreshEquipUI();
+  // clear form
+  equipForm.reset();
+  notify('Peralatan tersimpan');
+});
+
+resetEquipBtn.addEventListener('click', ()=>{
+  equipForm.reset();
+});
+
+/* ===========================
+   Export / Import / CSV
+   =========================== */
+exportJsonBtn.addEventListener('click', async ()=>{
+  const eqs = await idbGetAll('equipments');
+  const hist = await idbGetAll('history');
+  const payload = { _exportedAt: new Date().toISOString(), equipments: eqs, history: hist };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `alber-export-${Date.now()}.json`; a.click();
+  URL.revokeObjectURL(url);
+  notify('Ekspor JSON siap diunduh');
+});
+
+importJsonBtn.addEventListener('click', async ()=>{
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json';
+  input.onchange = async ()=> {
+    const f = input.files[0];
+    if(!f) return;
+    const txt = await f.text();
+    try{
+      const data = JSON.parse(txt);
+      if(Array.isArray(data.equipments)){
+        for(const e of data.equipments) await idbPut('equipments', e);
+      }
+      if(Array.isArray(data.history)){
+        for(const h of data.history) await idbPut('history', h);
+      }
+      await refreshEquipUI();
+      await refreshHistoryUI();
+      notify('Impor JSON selesai');
+    }catch(err){
+      alert('File tidak valid: ' + err.message);
+    }
+  };
+  input.click();
+});
+
+exportCsvBtn.addEventListener('click', async ()=>{
+  const hist = await idbGetAll('history');
+  if(!hist.length){ alert('Riwayat kosong'); return; }
+  const rows = [['timestamp', 'alatId', 'alatName', 'pekerjaan', 'volume', 'hm', 'totalSolar']];
+  for(const h of hist){
+    rows.push([new Date(h.timestamp).toISOString(), h.alatId, h.alatName, h.pekerjaan, h.volume, Number(h.hm||0).toFixed(2), Number(h.totalSolar||0).toFixed(2)]);
+  }
+  const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `alber-history-${Date.now()}.csv`; a.click();
+  URL.revokeObjectURL(url);
+  notify('CSV riwayat siap diunduh');
+});
+
+clearHistoryBtn.addEventListener('click', async ()=>{
+  if(confirm('Kosongkan semua riwayat? Tindakan ini tidak bisa dibatalkan.')){
+    await idbClear('history');
+    await refreshHistoryUI();
+    notify('Riwayat dikosongkan');
+  }
+});
+
+/* ===========================
+   Share & copy
+   =========================== */
+whatsappBtn.addEventListener('click', ()=>{
+  if(!lastResultText){ alert('Lakukan perhitungan terlebih dahulu'); return; }
+  const url = 'https://wa.me/?text=' + encodeURIComponent(lastResultText);
+  window.open(url, '_blank');
+});
+copyBtn.addEventListener('click', async ()=>{
+  if(!lastResultText){ alert('Lakukan perhitungan terlebih dahulu'); return; }
+  try{
+    await navigator.clipboard.writeText(lastResultText);
+    notify('Teks disalin ke clipboard');
+  }catch(e){
+    alert('Gagal menyalin: ' + e.message);
+  }
+});
+
+/* ===========================
+   Utilities & init
+   =========================== */
+function escapeHtml(s){
+  if(!s) return '';
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+/* populate pekerjaanSelect mapping for better labels if needed (kept simple) */
+
+/* Initialize db and UI */
+(async function init(){
+  try{
+    await ensureDefaults();
+    await refreshEquipUI();
+    await refreshHistoryUI();
+
+    // bind calc
+    calcBtn.addEventListener('click', async ()=>{
+      await hitung();
+    });
+
+    // preload first equipment's solar into input for convenience
+    const eqs = await idbGetAll('equipments');
+    if(eqs && eqs.length){
+      // populate select chosen index to empty; user chooses explicitly
+    }
+  }catch(err){
+    console.error('Init error', err);
+    alert('Terjadi kesalahan inisialisasi: ' + err.message);
+  }
+})();
+
+/* Small accessibility: allow Enter on equipment edit fields to save */
+[equipForm].forEach(f=>{
+  f.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      addEquipBtn.click();
+    }
+  });
+});
+
+</script>
+</body>
+</html>
